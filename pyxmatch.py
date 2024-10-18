@@ -1,94 +1,92 @@
 import cv2
 import numpy as np
 import pyautogui
+import subprocess
+import time
+import threading
+import tkinter as tk
+from tkinter import messagebox
 
-# Fonction pour détecter le lobby dans une image
+# Fonction pour détecter le lobby dans une capture d'écran
 def detect_lobby(image, lobby_image_path):
-    # Charger l'image modèle du lobby (fournir le chemin vers ton modèle)
-    template = cv2.imread(lobby_image_path, 0)  # Image du lobby en niveaux de gris
+    template = cv2.imread(lobby_image_path, 0)
     img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Comparer l'image actuelle avec le modèle de lobby
     res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
-    threshold = 0.8  # Ajuste le seuil pour la précision souhaitée
+    threshold = 0.8  # Ajuste ce seuil selon la précision
     loc = np.where(res >= threshold)
-    
-    # Si le modèle est trouvé dans l'image actuelle, retourne True
+
     if len(loc[0]) > 0:
         return True
     return False
 
-# Fonction pour superposer la publicité à l'image
-def overlay_ad(image, ad_image_path):
-    # Charger l'image de la publicité (fournir le chemin vers la publicité)
-    ad_image = cv2.imread(ad_image_path, -1)  # Charger avec transparence si c'est un PNG
-    
-    # Redimensionner la publicité si nécessaire pour qu'elle s'adapte à l'image
-    ad_resized = cv2.resize(ad_image, (image.shape[1], image.shape[0])) 
-    
-    # Superposition de la publicité (tu peux ajuster l'opacité si nécessaire)
-    overlay_image = cv2.addWeighted(image, 1, ad_resized, 0.5, 0)
-    
-    return overlay_image
+# Fonction pour capturer l'écran du jeu
+def capture_game_screen(screen_region):
+    screenshot = pyautogui.screenshot(region=screen_region)
+    frame = np.array(screenshot)
+    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    return frame
 
-# Fonction pour obtenir la liste des écrans disponibles
-def get_screens():
-    return pyautogui.getAllMonitors()
+# Fonction pour afficher la publicité en utilisant VLC
+def play_ad(ad_video_path):
+    vlc_process = subprocess.Popen(["vlc", "--fullscreen", ad_video_path])
+    return vlc_process
 
-# Fonction pour afficher l'image avec publicité sur l'écran choisi
-def display_on_screen(image, screen_number):
-    screens = get_screens()
-    
-    # Vérifier si l'écran choisi existe
-    if screen_number < len(screens):
-        screen = screens[screen_number]
-        cv2.imshow("Ad Display", image)
-        
-        # Positionner la fenêtre sur l'écran choisi
-        cv2.moveWindow("Ad Display", screen['left'], screen['top'])
-        cv2.waitKey(0)  # Attendre que l'utilisateur ferme la fenêtre
-    else:
-        print("Écran non disponible. Vérifie le numéro d'écran.")
+# Fonction pour arrêter la publicité
+def stop_ad(vlc_process):
+    vlc_process.terminate()
 
-# Fonction principale pour traiter la rediffusion vidéo
-def process_video(video_path, lobby_image_path, ad_image_path, screen_number):
-    # Ouvrir la vidéo (fournir le chemin de la vidéo de rediffusion)
-    cap = cv2.VideoCapture(video_path)
-    
-    while cap.isOpened():
-        ret, frame = cap.read()  # Lire une image de la vidéo
-        if not ret:
-            break  # Si on atteint la fin de la vidéo, sortir de la boucle
-        
-        # Vérifier si le lobby est détecté
+# Fonction pour exécuter la détection en temps réel
+def process_real_time(lobby_image_path, ad_video_path, screen_region):
+    ad_playing = False
+    vlc_process = None
+
+    while True:
+        frame = capture_game_screen(screen_region)
+
         if detect_lobby(frame, lobby_image_path):
-            print("Lobby détecté, affichage de la publicité...")
-            
-            # Superposer la publicité sur l'image
-            frame_with_ad = overlay_ad(frame, ad_image_path)
-            
-            # Afficher sur l'écran choisi
-            display_on_screen(frame_with_ad, screen_number)
+            if not ad_playing:
+                print("Lobby détecté, lancement de la publicité...")
+                vlc_process = play_ad(ad_video_path)
+                ad_playing = True
         else:
-            print("Lobby non détecté, passage à l'image suivante...")
-    
-    cap.release()  # Fermer la vidéo après traitement
+            if ad_playing:
+                print("Lobby non détecté, arrêt de la publicité...")
+                stop_ad(vlc_process)
+                ad_playing = False
 
-# --- PARTIE À MODIFIER SELON TES FICHIERS ---
+        time.sleep(1)
 
-# Chemin vers la vidéo de rediffusion
-video_path = "chemin/vers/la/video_rediffusion.mp4"  # Remplace avec le chemin réel de la vidéo
+# Fonction pour lancer le script de détection via le bouton
+def start_script():
+    try:
+        lobby_image_path = "chemin/vers/lobby_template.png"  # Remplace par l'image modèle du lobby
+        ad_video_path = "chemin/vers/publicite.mp4"  # Remplace par le fichier vidéo de la publicité
+        screen_region = (0, 0, 1920, 1080)  # Ajuste selon ton écran
 
-# Chemin vers l'image du lobby
-lobby_image_path = "chemin/vers/lobby_template.png"  # Remplace avec l'image modèle du lobby
+        # Lancer la détection dans un thread séparé pour ne pas bloquer l'interface
+        threading.Thread(target=process_real_time, args=(lobby_image_path, ad_video_path, screen_region)).start()
+    except Exception as e:
+        messagebox.showerror("Erreur", str(e))
 
-# Chemin vers l'image de la publicité
-ad_image_path = "chemin/vers/publicite.png"  # Remplace avec l'image de la publicité
+# Création de l'interface utilisateur avec Tkinter
+def create_gui():
+    window = tk.Tk()
+    window.title("PyxMatch - Lancement de la publicité")
+    window.geometry("400x200")
+    window.configure(bg="#1c1c1c")
 
-# Numéro de l'écran (0 pour le premier écran, 1 pour le second, etc.)
-screen_number = 1  # Choisis l'écran sur lequel afficher la publicité
+    # Fonction pour styliser le bouton
+    btn_font = ("Arial", 16, "bold")
+    btn_color = "#4CAF50"
+    btn_fg = "#ffffff"
 
-# --- FIN DES MODIFICATIONS ---
+    # Bouton pour lancer le script
+    start_button = tk.Button(window, text="PyxMatch", command=start_script, font=btn_font, bg=btn_color, fg=btn_fg, padx=20, pady=10)
+    start_button.pack(pady=50)
 
-# Lancer le traitement vidéo
-process_video(video_path, lobby_image_path, ad_image_path, screen_number)
+    window.mainloop()
+
+# Lancer l'interface graphique
+if __name__ == "__main__":
+    create_gui()
+
