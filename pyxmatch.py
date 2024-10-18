@@ -7,43 +7,60 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 
-# Fonction pour détecter le lobby dans une capture d'écran
-def detect_lobby(image, lobby_image_path):
-    template = cv2.imread(lobby_image_path, 0)
+def detect_lobby(image, lobby_image_paths):
+    """
+    Fonction pour détecter le lobby en comparant la capture d'écran avec une ou plusieurs images du lobby.
+    """
     img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
-    threshold = 0.8  # Ajuste ce seuil selon la précision
-    loc = np.where(res >= threshold)
+    
+    for lobby_image_path in lobby_image_paths:
+        print(f"Vérification de l'image du lobby: {lobby_image_path}")
+        template = cv2.imread(lobby_image_path, 0)
+        res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
+        threshold = 0.8
+        loc = np.where(res >= threshold)
 
-    if len(loc[0]) > 0:
-        return True
+        if len(loc[0]) > 0:
+            print("Match trouvé pour le lobby!")
+            return True
     return False
 
-# Fonction pour capturer l'écran du jeu
 def capture_game_screen(screen_region):
+    """
+    Capture une portion de l'écran spécifiée pour vérifier la présence du lobby.
+    """
     screenshot = pyautogui.screenshot(region=screen_region)
     frame = np.array(screenshot)
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    print("Capture d'écran effectuée")
     return frame
 
-# Fonction pour afficher la publicité en utilisant VLC
 def play_ad(ad_video_path):
+    """
+    Lance la vidéo publicitaire en plein écran via VLC.
+    """
+    print("Lancement de la publicité...")
     vlc_process = subprocess.Popen(["vlc", "--fullscreen", ad_video_path])
     return vlc_process
 
-# Fonction pour arrêter la publicité
 def stop_ad(vlc_process):
+    """
+    Arrête la vidéo publicitaire.
+    """
+    print("Arrêt de la publicité...")
     vlc_process.terminate()
 
-# Fonction pour exécuter la détection en temps réel
-def process_real_time(lobby_image_path, ad_video_path, screen_region):
+def process_real_time(lobby_image_paths, ad_video_path, screen_region):
+    """
+    Boucle principale qui vérifie en temps réel si le lobby est présent et gère la diffusion de la publicité.
+    """
     ad_playing = False
     vlc_process = None
 
     while True:
         frame = capture_game_screen(screen_region)
 
-        if detect_lobby(frame, lobby_image_path):
+        if detect_lobby(frame, lobby_image_paths):
             if not ad_playing:
                 print("Lobby détecté, lancement de la publicité...")
                 vlc_process = play_ad(ad_video_path)
@@ -56,37 +73,48 @@ def process_real_time(lobby_image_path, ad_video_path, screen_region):
 
         time.sleep(1)
 
-# Fonction pour lancer le script de détection via le bouton
 def start_script():
+    """
+    Fonction appelée par le bouton pour démarrer la détection et la publicité.
+    """
     try:
-        lobby_image_path = "chemin/vers/lobby_template.png"  # Remplace par l'image modèle du lobby
-        ad_video_path = "chemin/vers/publicite.mp4"  # Remplace par le fichier vidéo de la publicité
-        screen_region = (0, 0, 1920, 1080)  # Ajuste selon ton écran
+        print("Script lancé, démarrage de la détection du lobby...")
 
-        # Lancer la détection dans un thread séparé pour ne pas bloquer l'interface
-        threading.Thread(target=process_real_time, args=(lobby_image_path, ad_video_path, screen_region)).start()
+        lobby_image_paths = [
+            "chemin/vers/lobby_template1.png",
+            "chemin/vers/lobby_template2.png",
+            "chemin/vers/lobby_template3.png"
+        ]
+        ad_video_path = "chemin/vers/publicite.mp4"
+        screen_region = (0, 0, 1920, 1080)
+
+        threading.Thread(target=process_real_time, args=(lobby_image_paths, ad_video_path, screen_region)).start()
     except Exception as e:
         messagebox.showerror("Erreur", str(e))
 
-# Création de l'interface utilisateur avec Tkinter
 def create_gui():
+    """
+    Crée une interface graphique avec un bouton pour lancer le script.
+    """
     window = tk.Tk()
     window.title("PyxMatch - Lancement de la publicité")
     window.geometry("400x200")
     window.configure(bg="#1c1c1c")
 
-    # Fonction pour styliser le bouton
     btn_font = ("Arial", 16, "bold")
     btn_color = "#4CAF50"
     btn_fg = "#ffffff"
 
-    # Bouton pour lancer le script
     start_button = tk.Button(window, text="PyxMatch", command=start_script, font=btn_font, bg=btn_color, fg=btn_fg, padx=20, pady=10)
     start_button.pack(pady=50)
 
     window.mainloop()
 
-# Lancer l'interface graphique
-if __name__ == "__main__":
+def main():
+    """
+    Point d'entrée du script. Organise les appels de fonctions.
+    """
     create_gui()
 
+if __name__ == "__main__":
+    main()
